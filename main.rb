@@ -4,6 +4,12 @@ require 'singleton'
 require 'active_support/inflector'
 require 'active_support/core_ext/hash/indifferent_access'
 
+class Object
+  def tapp
+    self.tap{|obj| pp obj}
+  end
+end
+
 def lexer text
   Scanner[text].map{|code| Token[code]}
 end
@@ -106,26 +112,38 @@ class Token
 end
 
 class SyntaxTree
-  def self.[] literals
-    new literals
+  def self.[] tokens
+    new tokens
   end
 
-  def initialize literals
-    enum = literals.to_enum
+  def initialize tokens
+    enum = tokens.to_enum
     loop do
-      li = enum.next
-      if li.apply_start?
-        new_syntax = Function[enum.next, @current]
+      token = enum.next
+      if token.apply_start?
+        new_syntax = screen(enum.next, @current)
         @current.add new_syntax if !@current.nil?
         @root ||= new_syntax
         @current = new_syntax
-      elsif li.fanction?
-        @current.add Function[li]
-      elsif li.apply_end?
+
+      elsif token.fanction?
+        @current.add screen token
+
+      elsif token.apply_end?
         @current = @current.incomplete_syntax
+
       else
-        raise "Not implemented literal type : #{li.type}"
+        raise "Not implemented token type : #{token.type}"
       end
+    end
+  end
+
+  def screen token, syntax=nil
+    case token.code
+    when "lambda"
+      DefineLambda.new token, syntax
+    else
+      Function.new token, syntax
     end
   end
 
@@ -137,14 +155,28 @@ class SyntaxTree
     @root.inspect
   end
 
-  class BracketsSyntax
+  class SyntaxInterface
+    def eval
+      raise 'Overwrite required'
+    end
+
+    def to_code
+      raise 'Overwrite required'
+    end
+
+    def inspect
+      to_code
+    end
+  end
+
+  class BracketsSyntax < SyntaxInterface
     attr_reader :operator, :edges, :incomplete_syntax
     def self.[] *input
       new *input
     end
 
-    def initialize literal=nil, syntax=nil
-      @operator = literal
+    def initialize token=nil, syntax=nil
+      @operator = token
       @edges = []
       @incomplete_syntax = syntax
     end
@@ -157,11 +189,7 @@ class SyntaxTree
       @edges.empty?
     end
 
-    def eval
-      raise 'Overwrite required'
-    end
-
-    def inspect
+    def to_code
       immediate? ? "[#{@operator.code}]" : "[#{@operator.code} #{@edges.map(&:inspect).join(' ')}]"
     end
   end
@@ -172,6 +200,23 @@ class SyntaxTree
         return lambda[@operator.code, *@edges.map(&:eval)] if rule === @operator.code
       end
       $function_space[@operator.code][*@edges.map(&:eval)]
+    end
+  end
+
+  class DefineLambda < BracketsSyntax
+    # [lambda [list 'x'] [+ 1 x]]
+    def eval
+      args = @edges.shift.eval
+      body = @edges.map(&:to_code)
+
+      Kernel.eval <<~DOC
+        ->(#{args.join(',')}){
+          $function_space[:eval]["
+            #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
+            #{body.join(' ')}
+          "]
+        }
+      DOC
     end
   end
 end
@@ -238,16 +283,17 @@ $function_space = {
     SyntaxTree[lexer str].eval
   },
 
-  lambda: ->(args, body){
-    eval <<~END
-      ->(#{args.join(',')}){
-        $function_space[:eval]["
-          #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
-          #{body}
-        "]
-      }
-    END
-  },
+  # [lambda [list 'x' 'y'] [+ x y]]
+  # lambda: ->(args, body){
+  #   eval <<~END
+  #     ->(#{args.join(',')}){
+  #       $function_space[:eval]["
+  #         #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
+  #         #{body}
+  #       "]
+  #     }
+  #   END
+  # },
 }.with_indifferent_access
 
 $function_space.default_proc = ->(_, code){raise "#{code} is undefind in function_space."}
@@ -289,9 +335,10 @@ def question_and_answer
     {Q: "[* 2 3 4 5]", A: 120},
     {Q: "[/ 6 3 2]", A: 1},
 
-    # 変数の代入
-    # Variable assignments
+    # 変数
+    # Variable
     {Q: "[setv 'x' 1]", A: SAFE},
+    {Q: "[setv 'x' 1] x", A: 1},
     {Q: "[setv 'x' [list 1 2 3]] x", A: [1,2,3]},
 
     # 手続き的な実行
@@ -307,10 +354,11 @@ def question_and_answer
     # eval
     {Q: "[eval '[+ 1 2]']", A: 3},
 
+    # 無名関数
     # lambda
-    {Q: "[lambda [list 'x' 'y'] '[+ x y]']", A: SAFE},
-    {Q: "[set 'z' [lambda [list 'x' 'y'] '[+ x y]']] [z 1 2]", A: 3},
-    {Q: "[set 'x' [lambda [list] '10']] x", A: 10},
+    {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
+    {Q: "[set 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
+    {Q: "[set 'x' [lambda [list] 10]] x", A: 10},
 
     # {Q: "[dot Hash new]", A: {}},
     # {Q: "[dot [dot Hash new] store 'a' 1]", A: {'a' => 1}},
