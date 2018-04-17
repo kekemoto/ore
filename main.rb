@@ -140,6 +140,8 @@ class SyntaxTree
 
   def screen token, syntax=nil
     case token.code
+    when "coroutine"
+      DefineCoroutine.new token, syntax
     when "lambda"
       DefineLambda.new token, syntax
     else
@@ -200,6 +202,15 @@ class SyntaxTree
         return lambda[@operator.code, *@edges.map(&:eval)] if rule === @operator.code
       end
       $function_space[@operator.code][*@edges.map(&:eval)]
+    end
+  end
+
+  class DefineCoroutine < BracketsSyntax
+    # [coroutice [+ 1 2]]
+    def eval
+      ->(){
+        @edges.map(&:eval).last
+      }
     end
   end
 
@@ -353,6 +364,11 @@ def question_and_answer
 
     # eval
     {Q: "[eval '[+ 1 2]']", A: 3},
+
+    # コルーチン
+    # Coroutine
+    {Q: "[set 'x' [coroutine [+ 1 2]]] x", A: 3},
+    {Q: "[set 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
 
     # 無名関数
     # lambda
