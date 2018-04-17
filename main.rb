@@ -11,7 +11,7 @@ class Object
 end
 
 def lexer text
-  Scanner[text].map{|code| Token[code]}
+  Scanner[text].map{|str| Token[str]}
 end
 
 class Scanner
@@ -75,27 +75,27 @@ class Scanner
 end
 
 class Token
-  attr_reader :code, :type
+  attr_reader :symbol, :type
 
   ApplyStart = :ApplyStart
   ApplyEnd = :ApplyEnd
   Fanction = :Fanction
 
-  def self.[] code
-    new code
+  def self.[] symbol
+    new symbol
   end
 
-  def initialize code
-    case code
+  def initialize symbol
+    case symbol
     when '['
       @type = ApplyStart
-      @code = code
+      @symbol = symbol
     when ']'
       @type = ApplyEnd
-      @code = code
+      @symbol = symbol
     else
       @type = Fanction
-      @code = code
+      @symbol = symbol
     end
     self.freeze
   end
@@ -107,7 +107,7 @@ class Token
   end
 
   def inspect
-    "<#{@code}:#{@type}>"
+    "<#{@symbol}:#{@type}>"
   end
 end
 
@@ -139,7 +139,7 @@ class SyntaxTree
   end
 
   def screen token, syntax=nil
-    case token.code
+    case token.symbol
     when "coroutine"
       DefineCoroutine.new token, syntax
     when "lambda"
@@ -192,16 +192,16 @@ class SyntaxTree
     end
 
     def to_code
-      immediate? ? "[#{@operator.code}]" : "[#{@operator.code} #{@edges.map(&:inspect).join(' ')}]"
+      immediate? ? "[#{@operator.symbol}]" : "[#{@operator.symbol} #{@edges.map(&:inspect).join(' ')}]"
     end
   end
 
   class Function < BracketsSyntax
     def eval
       $case_function_space.each do |(rule, lambda)|
-        return lambda[@operator.code, *@edges.map(&:eval)] if rule === @operator.code
+        return lambda[@operator.symbol, *@edges.map(&:eval)] if rule === @operator.symbol
       end
-      $function_space[@operator.code][*@edges.map(&:eval)]
+      FunctionManager[@operator.symbol][*@edges.map(&:eval)]
     end
   end
 
@@ -214,6 +214,12 @@ class SyntaxTree
     end
   end
 
+  class DefineSpace < BracketsSyntax
+    def eval
+
+    end
+  end
+
   class DefineLambda < BracketsSyntax
     # [lambda [list 'x'] [+ 1 x]]
     def eval
@@ -222,7 +228,7 @@ class SyntaxTree
 
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
-          $function_space[:eval]["
+          FunctionManager[:eval]["
             #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
             #{body.join(' ')}
           "]
@@ -234,90 +240,107 @@ end
 
 $case_function_space = [
   # Number literal
-  [/\A[+|-]?[0-9]+.?[0-9]*\z/, ->(code, *args){code.to_f}],
+  [/\A[+|-]?[0-9]+.?[0-9]*\z/, ->(symbol, *args){symbol.to_f}],
 
   # String literal
-  [/\A'.*'\z/, ->(code, *args){code[1...-1]}],
+  [/\A'.*'\z/, ->(symbol, *args){symbol[1...-1]}],
 ]
 
-$function_space = {
-  set: ->(code, proc){
-    $function_space[code] = proc
-  },
+class FunctionManager
+  class FunctionSpace
+    def initialize space, hash=nil
+      @parent_space = space || {}
+      @hash = hash || {}.with_indifferent_access
+    end
 
-  setv: ->(code, value){
-    $function_space[code] = ->(){value}
-  },
+    def [] symbol
+      @hash[symbol] || @parent_space[symbol] || raise("#{symbol} is undefind in function_space.")
+    end
 
-  defined?: ->(code){
-    $function_space.key? code
-  },
+    def []= symbol, value
+      @hash[symbol] = value
+    end
+  end
 
-  undefined?: ->(code){
-    not $function_space.key? code
-  },
+  def self.root
+    @@root
+  end
 
-  cascade: ->(*results){
-    results.last
-  },
+  def self.current
+    @@current
+  end
 
-  true: ->(){true},
+  def self.[] symbol
+    @@current[symbol]
+  end
 
-  false: ->(){false},
+  def self.[]= symbol, value
+    @@current[symbol] = value
+  end
 
-  nil: ->(){nil},
+  def self.parent
+    @@current = @@current.parent_space
+  end
 
-  '+' => ->(*numbers){
-    raise "#{__method__} function is make one or more arguments." if numbers.size < 1
-    numbers.reduce(0){|acm, num| acm + num}
-  },
+  def self.make
+    @@current = FunctionSpace.new @@current
+  end
 
-  '-' => ->(*numbers){
-    raise "#{__method__} function is make two or more arguments." if numbers.size < 2
-    numbers.reduce{|acm, num| acm - num}
-  },
+  @@root = FunctionSpace.new(nil,
+    {
+      set: ->(symbol, proc){
+        FunctionManager[symbol] = proc
+      },
 
-  '*' => ->(*numbers){
-    numbers.reduce(1){|acm, num| acm * num}
-  },
+      setv: ->(symbol, value){
+        FunctionManager[symbol] = ->(){value}
+      },
 
-  '/' => ->(*numbers){
-    raise "#{__method__} function is make two or more arguments." if numbers.size < 2
-    numbers.reduce{|acm, num| acm / num}
-  },
+      define?: ->(symbol){
+        FunctionManager.define? symbol
+      },
 
-  list: ->(*input){
-    [*input]
-  },
+      cascade: ->(*results){
+        results.last
+      },
 
-  eval: ->(str){
-    SyntaxTree[lexer str].eval
-  },
+      true: ->(){true},
 
-  # [lambda [list 'x' 'y'] [+ x y]]
-  # lambda: ->(args, body){
-  #   eval <<~END
-  #     ->(#{args.join(',')}){
-  #       $function_space[:eval]["
-  #         #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
-  #         #{body}
-  #       "]
-  #     }
-  #   END
-  # },
-}.with_indifferent_access
+      false: ->(){false},
 
-$function_space.default_proc = ->(_, code){raise "#{code} is undefind in function_space."}
+      nil: ->(){nil},
 
-# class FunctionManager
-#   class FunctionSpace
-#     def initialize space=nil
-#       @parent_space = space
-#       @hash = {}.with_indifferent_access
-#       @hash.default_proc = ->(_, code){raise "#{code} is undefind in function_space."}
-#     end
-#   end
-# end
+      '+' => ->(*numbers){
+        raise "#{__method__} function is make one or more arguments." if numbers.size < 1
+        numbers.reduce(0){|acm, num| acm + num}
+      },
+
+      '-' => ->(*numbers){
+        raise "#{__method__} function is make two or more arguments." if numbers.size < 2
+        numbers.reduce{|acm, num| acm - num}
+      },
+
+      '*' => ->(*numbers){
+        numbers.reduce(1){|acm, num| acm * num}
+      },
+
+      '/' => ->(*numbers){
+        raise "#{__method__} function is make two or more arguments." if numbers.size < 2
+        numbers.reduce{|acm, num| acm / num}
+      },
+
+      list: ->(*input){
+        [*input]
+      },
+
+      eval: ->(str){
+        SyntaxTree[lexer str].eval
+      },
+    }.with_indifferent_access
+  )
+
+  @@current = @@root
+end
 
 def run text
   SyntaxTree.new(lexer text).eval
