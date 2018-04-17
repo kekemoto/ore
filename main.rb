@@ -382,8 +382,9 @@ def question_and_answer
     # 構文テスト
     # syntax test
     {Q: "[+ [+ 1 2] [+ 3 4]]", A: 10},
-    {Q: "[+ [1] [2]]", A: 3},
     {Q: "1 [+ 5 4] 3", A: 3},
+    {Q: "[+ [1] [2]]", A: 3},
+    # {Q: "[[+] [1] [2]]", A: 3},
 
     # eval
     {Q: "[eval '[+ 1 2]']", A: 3},
@@ -393,14 +394,15 @@ def question_and_answer
     {Q: "[set 'x' [coroutine [+ 1 2]]] x", A: 3},
     {Q: "[set 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
 
+    # スコープ
+    # Scope
+    # {Q: "[set 'x' 1] [space [set 'x' 2] x] x", A: 1}
+
     # 無名関数
     # lambda
     {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
     {Q: "[set 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
     {Q: "[set 'x' [lambda [list] 10]] x", A: 10},
-
-    # {Q: "[dot Hash new]", A: {}},
-    # {Q: "[dot [dot Hash new] store 'a' 1]", A: {'a' => 1}},
   ]
 
   tests.each do |test|
