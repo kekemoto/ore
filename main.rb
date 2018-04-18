@@ -260,6 +260,10 @@ class FunctionManager
     def []= symbol, value
       @hash[symbol] = value
     end
+
+    def key? symbol
+      @hash.key?(symbol) || @parent_space.key?(symbol)
+    end
   end
 
   def self.root
@@ -276,6 +280,10 @@ class FunctionManager
 
   def self.[]= symbol, value
     @@current[symbol] = value
+  end
+
+  def self.key? symbol
+    @@current.key? symbol
   end
 
   def self.parent
@@ -297,7 +305,7 @@ class FunctionManager
       },
 
       define?: ->(symbol){
-        FunctionManager.define? symbol
+        FunctionManager.key? symbol
       },
 
       cascade: ->(*results){
@@ -374,6 +382,8 @@ def question_and_answer
     {Q: "[setv 'x' 1]", A: SAFE},
     {Q: "[setv 'x' 1] x", A: 1},
     {Q: "[setv 'x' [list 1 2 3]] x", A: [1,2,3]},
+    {Q: "[define? 'qawsedrftgyhujikolp']", A: false},
+    {Q: "[setv 'x' 1] [define? 'x']", A: true},
 
     # 手続き的な実行
     # Procedural execution
@@ -406,10 +416,11 @@ def question_and_answer
   ]
 
   tests.each do |test|
-    if test[:A] == SAFE
-      run(test[:Q])
+  if test[:A] == SAFE
+  run(test[:Q])
     else
-      raise test[:Q] unless run(test[:Q]) == test[:A]
+     result = run(test[:Q])
+      raise "TestError: Question:#{test[:Q]}, Result:#{result}, Answer:#{test[:A]}" unless result == test[:A]
     end
   end
   puts "OK!"
