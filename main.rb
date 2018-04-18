@@ -142,6 +142,8 @@ class SyntaxTree
     case token.symbol
     when "coroutine"
       DefineCoroutine.new token, syntax
+    when "space"
+      DefineSpace.new token, syntax
     when "lambda"
       DefineLambda.new token, syntax
     else
@@ -216,7 +218,9 @@ class SyntaxTree
 
   class DefineSpace < BracketsSyntax
     def eval
-
+      FunctionManager.make
+      @edges.map(&:eval)
+      FunctionManager.back
     end
   end
 
@@ -229,7 +233,7 @@ class SyntaxTree
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
           FunctionManager[:eval]["
-            #{args.map{|arg| "[setv '#{arg}' \#{#{arg}}]"}.join(' ')}
+            #{args.map{|arg| "[set '#{arg}' \#{#{arg}}]"}.join(' ')}
             #{body.join(' ')}
           "]
         }
@@ -248,6 +252,8 @@ $case_function_space = [
 
 class FunctionManager
   class FunctionSpace
+    attr_reader :parent_space
+
     def initialize space, hash=nil
       @parent_space = space || {}
       @hash = hash || {}.with_indifferent_access
@@ -255,6 +261,7 @@ class FunctionManager
 
     def [] symbol
       @hash[symbol] || @parent_space[symbol] || raise("#{symbol} is undefind in function_space.")
+      # @hash[symbol] || raise("#{symbol} is undefind in function_space.")
     end
 
     def []= symbol, value
@@ -286,7 +293,7 @@ class FunctionManager
     @@current.key? symbol
   end
 
-  def self.parent
+  def self.back
     @@current = @@current.parent_space
   end
 
@@ -296,11 +303,11 @@ class FunctionManager
 
   @@root = FunctionSpace.new(nil,
     {
-      set: ->(symbol, proc){
+      define: ->(symbol, proc){
         FunctionManager[symbol] = proc
       },
 
-      setv: ->(symbol, value){
+      set: ->(symbol, value){
         FunctionManager[symbol] = ->(){value}
       },
 
@@ -379,15 +386,15 @@ def question_and_answer
 
     # 変数
     # Variable
-    {Q: "[setv 'x' 1]", A: SAFE},
-    {Q: "[setv 'x' 1] x", A: 1},
-    {Q: "[setv 'x' [list 1 2 3]] x", A: [1,2,3]},
+    {Q: "[set 'x' 1]", A: SAFE},
+    {Q: "[set 'x' 1] x", A: 1},
+    {Q: "[set 'x' [list 1 2 3]] x", A: [1,2,3]},
     {Q: "[define? 'qawsedrftgyhujikolp']", A: false},
-    {Q: "[setv 'x' 1] [define? 'x']", A: true},
+    {Q: "[set 'x' 1] [define? 'x']", A: true},
 
     # 手続き的な実行
     # Procedural execution
-    {Q: "[cascade [setv 'x' 3] x]", A: 3},
+    {Q: "[cascade [set 'x' 3] x]", A: 3},
 
     # 構文テスト
     # syntax test
@@ -401,18 +408,18 @@ def question_and_answer
 
     # コルーチン
     # Coroutine
-    {Q: "[set 'x' [coroutine [+ 1 2]]] x", A: 3},
-    {Q: "[set 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
+    {Q: "[define 'x' [coroutine [+ 1 2]]] x", A: 3},
+    {Q: "[define 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
 
     # スコープ
     # Scope
-    # {Q: "[set 'x' 1] [space [set 'x' 2] x] x", A: 1}
+    {Q: "[set 'x' 1] [space [set 'x' 2] x] x", A: 1},
 
     # 無名関数
     # lambda
     {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
-    {Q: "[set 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
-    {Q: "[set 'x' [lambda [list] 10]] x", A: 10},
+    {Q: "[define 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
+    {Q: "[define 'x' [lambda [list] 10]] x", A: 10},
   ]
 
   tests.each do |test|
