@@ -1,6 +1,7 @@
 
 require 'pp'
 require 'singleton'
+# require 'forwardable'
 require 'active_support/inflector'
 require 'active_support/core_ext/hash/indifferent_access'
 
@@ -9,6 +10,8 @@ class Object
     self.tap{|obj| pp obj}
   end
 end
+
+require_relative './context'
 
 def lexer text
   Scanner[text].map{|str| Token[str]}
@@ -142,8 +145,8 @@ class SyntaxTree
     case token.symbol
     when "coroutine"
       DefineCoroutine.new token, syntax
-    when "space"
-      DefineSpace.new token, syntax
+    when "context"
+      DefineContext.new token, syntax
     when "lambda"
       DefineLambda.new token, syntax
     else
@@ -200,10 +203,10 @@ class SyntaxTree
 
   class Function < BracketsSyntax
     def eval
-      $case_function_space.each do |(rule, lambda)|
+      $case_functions.each do |(rule, lambda)|
         return lambda[@operator.symbol, *@edges.map(&:eval)] if rule === @operator.symbol
       end
-      FunctionManager[@operator.symbol][*@edges.map(&:eval)]
+      ContextManager.instance[@operator.symbol][*@edges.map(&:eval)]
     end
   end
 
@@ -216,11 +219,11 @@ class SyntaxTree
     end
   end
 
-  class DefineSpace < BracketsSyntax
+  class DefineContext < BracketsSyntax
     def eval
-      FunctionManager.make
+      ContextManager.instance.make
       @edges.map(&:eval)
-      FunctionManager.back
+      ContextManager.instance.back
     end
   end
 
@@ -232,7 +235,7 @@ class SyntaxTree
 
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
-          FunctionManager[:eval]["
+          ContextManager.instance[:eval]["
             #{args.map{|arg| "[set '#{arg}' \#{#{arg}}]"}.join(' ')}
             #{body.join(' ')}
           "]
@@ -240,121 +243,6 @@ class SyntaxTree
       DOC
     end
   end
-end
-
-$case_function_space = [
-  # Number literal
-  [/\A[+|-]?[0-9]+.?[0-9]*\z/, ->(symbol, *args){symbol.to_f}],
-
-  # String literal
-  [/\A'.*'\z/, ->(symbol, *args){symbol[1...-1]}],
-]
-
-class FunctionManager
-  class FunctionSpace
-    attr_reader :parent_space
-
-    def initialize space, hash=nil
-      @parent_space = space || {}
-      @hash = hash || {}.with_indifferent_access
-    end
-
-    def [] symbol
-      @hash[symbol] || @parent_space[symbol] || raise("#{symbol} is undefind in function_space.")
-      # @hash[symbol] || raise("#{symbol} is undefind in function_space.")
-    end
-
-    def []= symbol, value
-      @hash[symbol] = value
-    end
-
-    def key? symbol
-      @hash.key?(symbol) || @parent_space.key?(symbol)
-    end
-  end
-
-  def self.root
-    @@root
-  end
-
-  def self.current
-    @@current
-  end
-
-  def self.[] symbol
-    @@current[symbol]
-  end
-
-  def self.[]= symbol, value
-    @@current[symbol] = value
-  end
-
-  def self.key? symbol
-    @@current.key? symbol
-  end
-
-  def self.back
-    @@current = @@current.parent_space
-  end
-
-  def self.make
-    @@current = FunctionSpace.new @@current
-  end
-
-  @@root = FunctionSpace.new(nil,
-    {
-      define: ->(symbol, proc){
-        FunctionManager[symbol] = proc
-      },
-
-      set: ->(symbol, value){
-        FunctionManager[symbol] = ->(){value}
-      },
-
-      define?: ->(symbol){
-        FunctionManager.key? symbol
-      },
-
-      cascade: ->(*results){
-        results.last
-      },
-
-      true: ->(){true},
-
-      false: ->(){false},
-
-      nil: ->(){nil},
-
-      '+' => ->(*numbers){
-        raise "#{__method__} function is make one or more arguments." if numbers.size < 1
-        numbers.reduce(0){|acm, num| acm + num}
-      },
-
-      '-' => ->(*numbers){
-        raise "#{__method__} function is make two or more arguments." if numbers.size < 2
-        numbers.reduce{|acm, num| acm - num}
-      },
-
-      '*' => ->(*numbers){
-        numbers.reduce(1){|acm, num| acm * num}
-      },
-
-      '/' => ->(*numbers){
-        raise "#{__method__} function is make two or more arguments." if numbers.size < 2
-        numbers.reduce{|acm, num| acm / num}
-      },
-
-      list: ->(*input){
-        [*input]
-      },
-
-      eval: ->(str){
-        SyntaxTree[lexer str].eval
-      },
-    }.with_indifferent_access
-  )
-
-  @@current = @@root
 end
 
 def run text
@@ -413,7 +301,7 @@ def question_and_answer
 
     # スコープ
     # Scope
-    {Q: "[set 'x' 1] [space [set 'x' 2] x] x", A: 1},
+    {Q: "[set 'x' 1] [context [set 'x' 2] x] x", A: 1},
 
     # 無名関数
     # lambda
