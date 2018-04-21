@@ -9,22 +9,29 @@ module BUILDIN
     },
 
     context: ->(syntaxes){
-      ContextManager.instance.make
-      syntaxes.map(&:eval)
-      ContextManager.instance.back
+      ContextManager.instance.make do
+        syntaxes.map(&:eval)
+      end
     },
 
-    # [lambda [list 'x'] [+ 1 x]]
+    # [lambda [list 'x' 'y'] [+ y x]]
     lambda: ->(syntaxes){
       args = syntaxes.shift.eval
-      body = syntaxes.map(&:to_code)
+      body = syntaxes
 
+      # ->(x,y){
+      #   ContextManager.make do
+      #     ContextManager.instance[:set]['x', x]
+      #     ContextManager.instance[:set]['y', y]
+      #     body.map(&:eval).last
+      #   end
+      # }
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
-          ContextManager.instance[:eval]["
-            #{args.map{|arg| "[set '#{arg}' \#{#{arg}}]"}.join(' ')}
-            #{body.join(' ')}
-          "]
+          ContextManager.instance.make do
+            #{args.map{|arg| "ContextManager.instance[:set]['#{arg}', #{arg}]"}.join(';')}
+            body.map(&:eval).last
+          end
         }
       DOC
     },

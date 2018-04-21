@@ -247,13 +247,20 @@ class ContextManager
     @current = Context.new
   end
 
-  def make *symbols
+  def new
     @history << @current
     @current = Context.new
   end
 
   def back
     @current = @history.pop
+  end
+
+  def make
+    new
+    result = yield
+    back
+    result
   end
 
   def [] symbol
