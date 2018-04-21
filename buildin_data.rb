@@ -1,6 +1,34 @@
 
 module BUILDIN
-  SYNTAX_EVALUTES = {}
+  SYNTAX_EVALUTES = {
+    # [coroutice [+ 1 2]]
+    coroutine: ->(syntaxes){
+      ->(){
+        syntaxes.map(&:eval).last
+      }
+    },
+
+    context: ->(syntaxes){
+      ContextManager.instance.make
+      syntaxes.map(&:eval)
+      ContextManager.instance.back
+    },
+
+    # [lambda [list 'x'] [+ 1 x]]
+    lambda: ->(syntaxes){
+      args = syntaxes.shift.eval
+      body = syntaxes.map(&:to_code)
+
+      Kernel.eval <<~DOC
+        ->(#{args.join(',')}){
+          ContextManager.instance[:eval]["
+            #{args.map{|arg| "[set '#{arg}' \#{#{arg}}]"}.join(' ')}
+            #{body.join(' ')}
+          "]
+        }
+      DOC
+    },
+  }.with_indifferent_access
 
   CASE_FUNCTIONS = [
     # Number literal
@@ -11,7 +39,7 @@ module BUILDIN
   ]
 
   FUNCTIONS = {
-    define: ->(symbol, proc){
+    bind: ->(symbol, proc){
       ContextManager.instance[symbol] = proc
     },
 
@@ -19,7 +47,7 @@ module BUILDIN
       ContextManager.instance[symbol] = ->(){value}
     },
 
-    define?: ->(symbol){
+    bind?: ->(symbol){
       ContextManager.instance.key? symbol
     },
 
@@ -57,7 +85,7 @@ module BUILDIN
     },
 
     eval: ->(str){
-      SyntaxTree[lexer str].eval
+      AST.make(lexer str).eval
     },
   }.with_indifferent_access
 end

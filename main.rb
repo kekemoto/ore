@@ -9,6 +9,18 @@ class Object
   def tapp
     self.tap{|obj| pp obj}
   end
+
+  def try method, *args
+    if self.respond_to?(method)
+      self.__send__(method, *args)
+    else
+      if block_given?
+        yield self
+      else
+        nil
+      end
+    end
+  end
 end
 
 require_relative './buildin_data'
@@ -114,8 +126,8 @@ class Token
   end
 end
 
-class SyntaxTree
-  def self.[] tokens
+class AST
+  def self.make tokens
     new tokens
   end
 
@@ -124,13 +136,13 @@ class SyntaxTree
     loop do
       token = enum.next
       if token.apply_start?
-        new_syntax = screen(enum.next, @current)
+        new_syntax = BracketsSyntax.new enum.next, @current
         @current.add new_syntax if !@current.nil?
         @root ||= new_syntax
         @current = new_syntax
 
       elsif token.fanction?
-        @current.add screen token
+        @current.add BracketsSyntax.new token
 
       elsif token.apply_end?
         @current = @current.incomplete_syntax
@@ -138,19 +150,6 @@ class SyntaxTree
       else
         raise "Not implemented token type : #{token.type}"
       end
-    end
-  end
-
-  def screen token, syntax=nil
-    case token.symbol
-    when "coroutine"
-      DefineCoroutine.new token, syntax
-    when "context"
-      DefineContext.new token, syntax
-    when "lambda"
-      DefineLambda.new token, syntax
-    else
-      Function.new token, syntax
     end
   end
 
@@ -192,55 +191,24 @@ class SyntaxTree
       @edges << function
     end
 
+    def eval
+      BUILDIN::SYNTAX_EVALUTES[@operator.symbol].try(:call, @edges) do
+        # If "try" is used, "@edges.map(&:eval)" will be evaluated first.
+        # So do not use "try"
+        if it = CaseFunction.instance[@operator.symbol]
+          it.call(@operator.symbol, *@edges.map(&:eval))
+        else
+          ContextManager.instance[@operator.symbol][*@edges.map(&:eval)]
+        end
+      end
+    end
+
     def immediate?
       @edges.empty?
     end
 
     def to_code
-      immediate? ? "[#{@operator.symbol}]" : "[#{@operator.symbol} #{@edges.map(&:inspect).join(' ')}]"
-    end
-  end
-
-  class Function < BracketsSyntax
-    def eval
-      BUILDIN::CASE_FUNCTIONS.each do |(rule, lambda)|
-        return lambda[@operator.symbol, *@edges.map(&:eval)] if rule === @operator.symbol
-      end
-      ContextManager.instance[@operator.symbol][*@edges.map(&:eval)]
-    end
-  end
-
-  class DefineCoroutine < BracketsSyntax
-    # [coroutice [+ 1 2]]
-    def eval
-      ->(){
-        @edges.map(&:eval).last
-      }
-    end
-  end
-
-  class DefineContext < BracketsSyntax
-    def eval
-      ContextManager.instance.make
-      @edges.map(&:eval)
-      ContextManager.instance.back
-    end
-  end
-
-  class DefineLambda < BracketsSyntax
-    # [lambda [list 'x'] [+ 1 x]]
-    def eval
-      args = @edges.shift.eval
-      body = @edges.map(&:to_code)
-
-      Kernel.eval <<~DOC
-        ->(#{args.join(',')}){
-          ContextManager.instance[:eval]["
-            #{args.map{|arg| "[set '#{arg}' \#{#{arg}}]"}.join(' ')}
-            #{body.join(' ')}
-          "]
-        }
-      DOC
+      immediate? ? "#{@operator.symbol}" : "[#{@operator.symbol} #{@edges.map(&:inspect).join(' ')}]"
     end
   end
 end
@@ -262,13 +230,13 @@ class Context
     @functions.key? symbol
   end
 
-  def copy context, *symbols
-    copy_functions ={}
-    symbols.each do |s|
-      copy_functions[s] = context[s]
-    end
-    @functions.update copy_functions
-  end
+  # def copy context, *symbols
+  #   copy_functions ={}
+  #   symbols.each do |s|
+  #     copy_functions[s] = context[s]
+  #   end
+  #   @functions.update copy_functions
+  # end
 end
 
 class ContextManager
@@ -301,12 +269,24 @@ class ContextManager
   end
 end
 
+class CaseFunction
+  include Singleton
+
+  def initialize
+    @data = BUILDIN::CASE_FUNCTIONS
+  end
+
+  def [] symbol
+    @data.find{|(rule, lambda)| rule === symbol}.try(:at, 1)
+  end
+end
+
 def run text
-  SyntaxTree.new(lexer text).eval
+  AST.make(lexer text).eval
 end
 
 def tree text
-  pp SyntaxTree.new(lexer text);0
+  pp AST.make(lexer text);0
 end
 
 SAFE = :safe_is_sign_as_a_nothing_error
@@ -333,8 +313,8 @@ def question_and_answer
     {Q: "[set 'x' 1]", A: SAFE},
     {Q: "[set 'x' 1] x", A: 1},
     {Q: "[set 'x' [list 1 2 3]] x", A: [1,2,3]},
-    {Q: "[define? 'qawsedrftgyhujikolp']", A: false},
-    {Q: "[set 'x' 1] [define? 'x']", A: true},
+    {Q: "[bind? 'qawsedrftgyhujikolp']", A: false},
+    {Q: "[set 'x' 1] [bind? 'x']", A: true},
 
     # 手続き的な実行
     # Procedural execution
@@ -352,8 +332,8 @@ def question_and_answer
 
     # コルーチン
     # Coroutine
-    {Q: "[define 'x' [coroutine [+ 1 2]]] x", A: 3},
-    {Q: "[define 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
+    {Q: "[bind 'x' [coroutine [+ 1 2]]] x", A: 3},
+    {Q: "[bind 'x' [coroutine [+ 1 2]]] [+ x x]", A: 6},
 
     # スコープ
     # Scope
@@ -362,13 +342,13 @@ def question_and_answer
     # 無名関数
     # lambda
     {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
-    {Q: "[define 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
-    {Q: "[define 'x' [lambda [list] 10]] x", A: 10},
+    {Q: "[bind 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
+    {Q: "[bind 'x' [lambda [list] 10]] x", A: 10},
   ]
 
   tests.each do |test|
-  if test[:A] == SAFE
-  run(test[:Q])
+    if test[:A] == SAFE
+      run(test[:Q])
     else
       result = run(test[:Q])
       raise "TestError: Question:#{test[:Q]}, Result:#{result}, Answer:#{test[:A]}" unless result == test[:A]
