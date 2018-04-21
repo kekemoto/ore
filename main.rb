@@ -11,7 +11,7 @@ class Object
   end
 end
 
-require_relative './context'
+require_relative './buildin_data'
 
 def lexer text
   Scanner[text].map{|str| Token[str]}
@@ -203,7 +203,7 @@ class SyntaxTree
 
   class Function < BracketsSyntax
     def eval
-      $case_functions.each do |(rule, lambda)|
+      BUILDIN::CASE_FUNCTIONS.each do |(rule, lambda)|
         return lambda[@operator.symbol, *@edges.map(&:eval)] if rule === @operator.symbol
       end
       ContextManager.instance[@operator.symbol][*@edges.map(&:eval)]
@@ -242,6 +242,62 @@ class SyntaxTree
         }
       DOC
     end
+  end
+end
+
+class Context
+  def initialize functions={}
+    @functions = functions.with_indifferent_access
+  end
+
+  def [] symbol
+    @functions[symbol]
+  end
+
+  def []= symbol, proc
+    @functions[symbol] = proc
+  end
+
+  def key? symbol
+    @functions.key? symbol
+  end
+
+  def copy context, *symbols
+    copy_functions ={}
+    symbols.each do |s|
+      copy_functions[s] = context[s]
+    end
+    @functions.update copy_functions
+  end
+end
+
+class ContextManager
+  include Singleton
+
+  def initialize
+    @history = []
+    @current = Context.new
+  end
+
+  def make *symbols
+    @history << @current
+    @current = Context.new
+  end
+
+  def back
+    @current = @history.pop
+  end
+
+  def [] symbol
+    @current[symbol] || BUILDIN::FUNCTIONS[symbol] || raise("#{symbol} is undefined in context.")
+  end
+
+  def []= symbol, proc
+    @current[symbol] = proc
+  end
+
+  def key? symbol
+    @current.key? symbol
   end
 end
 
@@ -314,7 +370,7 @@ def question_and_answer
   if test[:A] == SAFE
   run(test[:Q])
     else
-     result = run(test[:Q])
+      result = run(test[:Q])
       raise "TestError: Question:#{test[:Q]}, Result:#{result}, Answer:#{test[:A]}" unless result == test[:A]
     end
   end
