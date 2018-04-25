@@ -192,7 +192,7 @@ class AST
     end
 
     def eval
-      BUILDIN::SYNTAX_EVALUTES[@operator.symbol].try(:call, @edges) do
+      BUILDIN::SYNTAX_EVALUTES[@operator.symbol].try(:call, *@edges) do
         # If "try" is used, "@edges.map(&:eval)" will be evaluated first.
         # So do not use "try"
         if it = CaseFunction.instance[@operator.symbol]
@@ -351,6 +351,11 @@ def question_and_answer
     {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
     {Q: "[bind 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
     {Q: "[bind 'x' [lambda [list] 10]] x", A: 10},
+    # {Q: "[[lambda [list 'x' 'y'] [+ x y]] 1 2]", A: 3},
+
+    # if, for
+    {Q: "[if true 1 2]", A: 1},
+    {Q: "[if false 1 2]", A: 2},
   ]
 
   tests.each do |test|

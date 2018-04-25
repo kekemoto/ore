@@ -2,20 +2,20 @@
 module BUILDIN
   SYNTAX_EVALUTES = {
     # [coroutice [+ 1 2]]
-    coroutine: ->(syntaxes){
+    coroutine: ->(*syntaxes){
       ->(){
         syntaxes.map(&:eval).last
       }
     },
 
-    context: ->(syntaxes){
+    context: ->(*syntaxes){
       ContextManager.instance.make do
         syntaxes.map(&:eval)
       end
     },
 
     # [lambda [list 'x' 'y'] [+ y x]]
-    lambda: ->(syntaxes){
+    lambda: ->(*syntaxes){
       args = syntaxes.shift.eval
       body = syntaxes
 
@@ -29,11 +29,21 @@ module BUILDIN
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
           ContextManager.instance.make do
-            #{args.map{|arg| "ContextManager.instance[:set]['#{arg}', #{arg}]"}.join(';')}
+            #{args.map{|arg|
+              "ContextManager.instance[:set]['#{arg}', #{arg}]"
+            }.join(';')}
             body.map(&:eval).last
           end
         }
       DOC
+    },
+
+    if: ->(bool, fun1, fun2=nil){
+      if bool.eval
+        fun1.eval
+      else
+        fun2.try :eval
+      end
     },
   }.with_indifferent_access
 
