@@ -29,63 +29,160 @@ def lexer text
   Scanner[text].map{|str| Token[str]}
 end
 
-class Scanner
-  attr_reader :tokens
+# class Scanner
+#   attr_reader :tokens
+#
+#   def self.[] text
+#     new(text).tokens
+#   end
+#
+#   def initialize text
+#     @state = :normal
+#     @tokens = []
+#     @token = ''
+#     "[cascade #{text}]".each_char do |char|
+#       screen char
+#     end
+#   end
+#
+#   private
+#
+#   def screen char
+#     case @state
+#     when :normal
+#       case char
+#       when Delimiter::NORMAL
+#         @tokens << @token unless @token == ''
+#         @token = ''
+#       when Delimiter::FUNCTION
+#         @tokens << @token unless @token == ''
+#         @tokens << char
+#         @token = ''
+#       when Delimiter::STRING
+#         @token += char
+#         @state = :string
+#       else
+#         @token += char
+#       end
+#
+#     when :string
+#       case char
+#       when Delimiter::STRING
+#         @token += char
+#         @state = :normal
+#       else
+#         @token += char
+#       end
+#
+#     else
+#       raise "#{@state} is not implemented in scan state."
+#     end
+#   end
+#
+#   module Delimiter
+#     # space
+#     NORMAL = /\s/
+#     # [ ]
+#     FUNCTION = /(\[|\])/
+#     # '
+#     STRING = /'/
+#   end
+# end
 
-  def self.[] text
-    new(text).tokens
+class Scanner
+  class Queue
+    # This singleton class is QueueManager
+    class << self
+      attr_reader :dist
+
+      def set
+        @dist = (0..3).reduce(nil){|result, i| new i, result}
+      end
+
+      def enq input
+        @dist.enq input
+        self
+      end
+
+      def match? delimiter
+        @dist.match? delimiter
+      end
+
+      def inspect
+        @dist.inspect
+      end
+    end
+
+    def initialize size=0, destination=nil
+      @size = size
+      @chars = []
+      @destination = destination
+    end
+
+    def enq char
+      return None if None == char
+      if @size.zero?
+        @chars.push char
+        None
+      elsif @chars.size < @size
+        @chars.push char
+        None
+      else
+        @chars.push char
+        @destination.try :enq, @chars.shift
+      end
+    end
+
+    def show
+      @chars.join
+    end
+
+    def press result=""
+      if @destination.nil?
+        show + result
+      else
+        @destination.press show + result
+      end
+    end
+
+    def match? delimiter
+      if delimiter === show
+        [@destination.press, show]
+      else
+        if @destination.nil?
+          false
+        else
+          @destination.match? delimiter
+        end
+      end
+    end
+
+    def inspect
+      if @destination.nil?
+        "#{@size.inspect}:#{@chars.inspect}"
+      else
+        "#{@destination.inspect} <- #{@size.inspect}:#{@chars.inspect}"
+      end
+    end
+
+    class None
+    end
+  end
+
+  class Automaton
+    def initialize
+      @state = :normal
+    end
+
+    def check chars
+      case @state
+      when :normal
+      end
+    end
   end
 
   def initialize text
-    @state = :normal
-    @tokens = []
-    @token = ''
-    "[cascade #{text}]".each_char do |char|
-      screen char
-    end
-  end
 
-  private
-
-  def screen char
-    case @state
-    when :normal
-      case char
-      when Delimiter::NORMAL
-        @tokens << @token unless @token == ''
-        @token = ''
-      when Delimiter::FUNCTION
-        @tokens << @token unless @token == ''
-        @tokens << char
-        @token = ''
-      when Delimiter::STRING
-        @token += char
-        @state = :string
-      else
-        @token += char
-      end
-
-    when :string
-      case char
-      when Delimiter::STRING
-        @token += char
-        @state = :normal
-      else
-        @token += char
-      end
-
-    else
-      raise "#{@state} is not implemented in scan state."
-    end
-  end
-
-  module Delimiter
-    # space
-    NORMAL = /\s/
-    # [ ]
-    FUNCTION = /(\[|\])/
-    # '
-    STRING = /'/
   end
 end
 
@@ -368,4 +465,4 @@ def question_and_answer
   end
   puts "OK!"
 end
-question_and_answer
+# question_and_answer
