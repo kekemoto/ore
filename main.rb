@@ -21,6 +21,14 @@ class Object
       end
     end
   end
+
+  def equal_do other, compare=:==
+    if block_given? && self.__send__(compare, other)
+      yield self, other
+    else
+      self
+    end
+  end
 end
 
 require_relative './buildin_data'
@@ -96,7 +104,12 @@ class Scanner
       attr_reader :dist
 
       def set
-        @dist = (0..3).reduce(nil){|result, i| new i, result}
+        @queues = []
+        @dist = (0..3).reduce(nil){|result, i|
+          q = new i, result
+          @queues.push q
+          q
+        }
       end
 
       def enq input
@@ -105,7 +118,14 @@ class Scanner
       end
 
       def match? delimiter
-        @dist.match? delimiter
+        enum = @queues.to_enum
+        loop do
+          q = enum.next
+          if result = q.match?(delimiter)
+            return result
+          end
+        end
+        false
       end
 
       def inspect
@@ -139,7 +159,7 @@ class Scanner
 
     def press result=""
       if @destination.nil?
-        show + result
+        (show + result).equal_do(""){nil}
       else
         @destination.press show + result
       end
@@ -147,13 +167,9 @@ class Scanner
 
     def match? delimiter
       if delimiter === show
-        [@destination.press, show]
+        [@destination.try(:press), show].compact
       else
-        if @destination.nil?
-          false
-        else
-          @destination.match? delimiter
-        end
+        false
       end
     end
 
@@ -170,6 +186,8 @@ class Scanner
   end
 
   class Automaton
+    include Singleton
+
     def initialize
       @state = :normal
     end
@@ -177,6 +195,9 @@ class Scanner
     def check chars
       case @state
       when :normal
+        # delimiters.each do |d|
+        #   Queue.match?(d).equal_do(true){|it| return it}
+        # end
       end
     end
   end
