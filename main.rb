@@ -22,9 +22,17 @@ class Object
     end
   end
 
-  def equal_do other, compare=:==
+  def if_equal other, compare=:==
     if block_given? && self.__send__(compare, other)
       yield self, other
+    else
+      self
+    end
+  end
+
+  def if_truthy
+    if self
+      yield self
     else
       self
     end
@@ -34,7 +42,7 @@ end
 require_relative './buildin_data'
 
 def lexer text
-  Scanner[text].map{|str| Token[str]}
+  Scanner.exec(text).map{|str| Token[str]}
 end
 
 # class Scanner
@@ -106,9 +114,8 @@ class Scanner
       def set
         @queues = []
         @dist = (0..3).reduce(nil){|result, i|
-          q = new i, result
-          @queues.push q
-          q
+          p result
+          new(i, result).tap{|q| @queues.push q}
         }
       end
 
@@ -118,14 +125,24 @@ class Scanner
       end
 
       def match? delimiter
-        enum = @queues.to_enum
-        loop do
-          q = enum.next
+        @queues.each do |q|
           if result = q.match?(delimiter)
             return result
           end
         end
         false
+      end
+
+      def empty?
+        @queues[1..-1].all?(&:empty?)
+      end
+
+      def shift
+        @dist.shift
+      end
+
+      def press
+        @dist.press
       end
 
       def inspect
@@ -149,20 +166,20 @@ class Scanner
         None
       else
         @chars.push char
-        @destination.try :enq, @chars.shift
+        shift
       end
     end
 
-    def show
-      @chars.join
-    end
-
-    def press result=""
-      if @destination.nil?
-        (show + result).equal_do(""){nil}
+    def shift
+      if it = @chars.shift
+        @destination.try :enq, it
       else
-        @destination.press show + result
+        @destination.try :shift
       end
+    end
+
+    def empty?
+      @chars.empty?
     end
 
     def match? delimiter
@@ -171,6 +188,18 @@ class Scanner
       else
         false
       end
+    end
+
+    def press result=""
+      if @destination.nil?
+        (show + result).if_equal(""){nil}
+      else
+        @destination.press show + result
+      end.tap{@chars=[]}
+    end
+
+    def show
+      @chars.join
     end
 
     def inspect
@@ -188,22 +217,64 @@ class Scanner
   class Automaton
     include Singleton
 
+    module DELIMITER
+      UNIT = [/\s/,':']
+      IGNORE_START = ["'"]
+      IGNORE_END = ["'"]
+    end
+
     def initialize
       @state = :normal
     end
 
-    def check chars
+    def check
       case @state
       when :normal
-        # delimiters.each do |d|
-        #   Queue.match?(d).equal_do(true){|it| return it}
-        # end
+        DELIMITER::UNIT.each do |d|
+          Queue.match?(d).if_truthy do |tokens|
+            return tokens
+          end
+        end
+
+        DELIMITER::IGNORE_START.each do |d|
+          Queue.match?(d).if_truthy do |tokens|
+            @state = :ignore
+            return tokens
+          end
+        end
+
+      when :ignore
+        DELIMITER::IGNORE_END.each do |d|
+          Queue.match?(d).if_truthy do |tokens|
+            @state = :normal
+            return tokens
+          end
+        end
+
+      else
+        false
       end
     end
   end
 
-  def initialize text
-
+  def self.exec text
+    tokens = []
+    text.each_char do |c|
+      Queue.enq c
+      Automaton.instance.check.if_truthy do |t|
+        tokens += t
+      end
+    end
+    loop do
+      if Queue.empty?
+        return tokens << Queue.press
+      end
+      Queue.shift
+      Automaton.instance.check.if_truthy do |t|
+        tokens += t
+      end
+      p Queue
+    end
   end
 end
 
