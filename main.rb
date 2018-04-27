@@ -218,7 +218,7 @@ class Scanner
     include Singleton
 
     module DELIMITER
-      UNIT = [/\s/,':']
+      UNIT = [/\A\s\z/, '[', ']', ':']
       IGNORE_START = ["'"]
       IGNORE_END = ["'"]
     end
@@ -259,6 +259,7 @@ class Scanner
 
   def self.exec text
     tokens = []
+    Queue.set
     text.each_char do |c|
       Queue.enq c
       Automaton.instance.check.if_truthy do |t|
