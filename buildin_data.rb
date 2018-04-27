@@ -8,8 +8,8 @@ module BUILDIN
       }
     },
 
-    context: ->(*syntaxes){
-      ContextManager.instance.make do
+    space: ->(*syntaxes){
+      SpaceManager.instance.make do
         syntaxes.map(&:eval)
       end
     },
@@ -20,17 +20,17 @@ module BUILDIN
       body = syntaxes
 
       # ->(x,y){
-      #   ContextManager.make do
-      #     ContextManager.instance[:set]['x', x]
-      #     ContextManager.instance[:set]['y', y]
+      #   SpaceManager.make do
+      #     SpaceManager.instance[:set]['x', x]
+      #     SpaceManager.instance[:set]['y', y]
       #     body.map(&:eval).last
       #   end
       # }
       Kernel.eval <<~DOC
         ->(#{args.join(',')}){
-          ContextManager.instance.make do
+          SpaceManager.instance.make do
             #{args.map{|arg|
-              "ContextManager.instance[:set]['#{arg}', #{arg}]"
+              "SpaceManager.instance[:set]['#{arg}', #{arg}]"
             }.join(';')}
             body.map(&:eval).last
           end
@@ -57,15 +57,15 @@ module BUILDIN
 
   FUNCTIONS = {
     bind: ->(symbol, proc){
-      ContextManager.instance[symbol] = proc
+      SpaceManager.instance[symbol] = proc
     },
 
     set: ->(symbol, value){
-      ContextManager.instance[symbol] = ->(){value}
+      SpaceManager.instance[symbol] = ->(){value}
     },
 
     bind?: ->(symbol){
-      ContextManager.instance.key? symbol
+      SpaceManager.instance.key? symbol
     },
 
     cascade: ->(*results){

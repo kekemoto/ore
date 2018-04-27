@@ -198,7 +198,7 @@ class AST
         if it = CaseFunction.instance[@operator.symbol]
           it.call(@operator.symbol, *@edges.map(&:eval))
         else
-          ContextManager.instance[@operator.symbol][*@edges.map(&:eval)]
+          SpaceManager.instance[@operator.symbol][*@edges.map(&:eval)]
         end
       end
     end
@@ -213,7 +213,7 @@ class AST
   end
 end
 
-class Context
+class Space
   def initialize functions={}
     @functions = functions.with_indifferent_access
   end
@@ -230,26 +230,26 @@ class Context
     @functions.key? symbol
   end
 
-  # def copy context, *symbols
+  # def copy space, *symbols
   #   copy_functions ={}
   #   symbols.each do |s|
-  #     copy_functions[s] = context[s]
+  #     copy_functions[s] = space[s]
   #   end
   #   @functions.update copy_functions
   # end
 end
 
-class ContextManager
+class SpaceManager
   include Singleton
 
   def initialize
     @history = []
-    @current = Context.new
+    @current = Space.new
   end
 
   def new
     @history << @current
-    @current = Context.new
+    @current = Space.new
   end
 
   def back
@@ -264,7 +264,7 @@ class ContextManager
   end
 
   def [] symbol
-    @current[symbol] || BUILDIN::FUNCTIONS[symbol] || raise("#{symbol} is undefined in context.")
+    @current[symbol] || BUILDIN::FUNCTIONS[symbol] || raise("#{symbol} is undefined in space.")
   end
 
   def []= symbol, proc
@@ -344,7 +344,7 @@ def question_and_answer
 
     # スコープ
     # Scope
-    {Q: "[set 'x' 1] [context [set 'x' 2] x] x", A: 1},
+    {Q: "[set 'x' 1] [space [set 'x' 2] x] x", A: 1},
 
     # 無名関数
     # lambda
