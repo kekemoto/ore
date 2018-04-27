@@ -21,71 +21,71 @@ class Object
       end
     end
   end
+
+  def if_equal other, compare=:==
+    if block_given? && self.__send__(compare, other)
+      yield self, other
+    else
+      self
+    end
+  end
+
+  def if_truthy
+    if self
+      yield self
+    else
+      self
+    end
+  end
 end
 
 require_relative './buildin_data'
 
 def lexer text
-  Scanner[text].map{|str| Token[str]}
+  Scanner.exec(text).map{|str| Token[str]}
 end
 
 class Scanner
   attr_reader :tokens
 
-  def self.[] text
+  def self.exec text
     new(text).tokens
   end
 
   def initialize text
-    @state = :normal
-    @tokens = []
-    @token = ''
-    "[cascade #{text}]".each_char do |char|
-      screen char
-    end
+    @tokens = sift_string("[cascade " + text + "]")
+    .map{|it| sift_delimiter(it)}
+    .flatten
   end
 
   private
 
-  def screen char
-    case @state
-    when :normal
-      case char
-      when Delimiter::NORMAL
-        @tokens << @token unless @token == ''
-        @token = ''
-      when Delimiter::FUNCTION
-        @tokens << @token unless @token == ''
-        @tokens << char
-        @token = ''
-      when Delimiter::STRING
-        @token += char
-        @state = :string
-      else
-        @token += char
-      end
-
-    when :string
-      case char
-      when Delimiter::STRING
-        @token += char
-        @state = :normal
-      else
-        @token += char
-      end
-
-    else
-      raise "#{@state} is not implemented in scan state."
+  def sift_string text
+    text.split("'").map.with_index do |chars, index|
+      index.even? ? chars : "'" + chars + "'"
     end
   end
 
-  module Delimiter
-    # space
-    NORMAL = /\s/
-    # [ ]
-    FUNCTION = /(\[|\])/
-    # '
-    STRING = /'/
+  def sift_delimiter text
+    return text if /\A'.*'\z/ === text
+    tokens = []
+    token = ""
+    text.each_char do |c|
+      case c
+      when /\s/
+        # Do not use these delimiters.
+        tokens << token unless token == ""
+        token = ""
+      when '[', ']'
+        # Use these delimiters.
+        tokens << token unless token == ""
+        tokens << c
+        token = ""
+      else
+        token += c
+      end
+    end
+    tokens
   end
 end
 
