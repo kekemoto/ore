@@ -1,5 +1,10 @@
 
 module BUILDIN
+  REPLACE_SYMBOLS = {
+    /\(/ => '[list ',
+    /\)/ => ']',
+  }
+
   SYNTAX_EVALUTES = {
     # [coroutice [+ 1 2]]
     coroutine: ->(*syntaxes){

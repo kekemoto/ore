@@ -53,17 +53,17 @@ class Scanner
   end
 
   def initialize text
-    @tokens = sift_string("[cascade " + text + "]")
-    .map{|it| sift_delimiter(it)}
-    .flatten
+    @tokens = sift_string("[cascade " + text + "]") do |it|
+      sift_delimiter replace it
+    end
   end
 
   private
 
   def sift_string text
     text.split("'").map.with_index do |chars, index|
-      index.even? ? chars : "'" + chars + "'"
-    end
+      index.even? ? yield(chars) : "'" + chars + "'"
+    end.flatten
   end
 
   def sift_delimiter text
@@ -86,6 +86,13 @@ class Scanner
       end
     end
     tokens
+  end
+
+  def replace text
+    BUILDIN::REPLACE_SYMBOLS.each do |reg, str|
+      text.gsub! reg, str
+    end
+    text
   end
 end
 
@@ -307,6 +314,7 @@ def question_and_answer
     {Q: "false", A: false},
     {Q: "nil", A: nil},
     {Q: "[list 1 2 3]", A: [1,2,3]},
+    {Q: "(1 2 3)", A: [1,2,3]},
 
     # 四則演算
     # Arithmetic operations
@@ -353,7 +361,7 @@ def question_and_answer
     {Q: "[bind 'x' [lambda [list] 10]] x", A: 10},
     # {Q: "[[lambda [list 'x' 'y'] [+ x y]] 1 2]", A: 3},
 
-    # if, for
+    # if
     {Q: "[if true 1 2]", A: 1},
     {Q: "[if false 1 2]", A: 2},
   ]
