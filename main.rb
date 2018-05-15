@@ -111,13 +111,13 @@ class Token
     case symbol
     when '['
       @type = ApplyStart
-      @symbol = symbol
+      @symbol = symbol.to_sym
     when ']'
       @type = ApplyEnd
-      @symbol = symbol
+      @symbol = symbol.to_sym
     else
       @type = Fanction
-      @symbol = symbol
+      @symbol = symbol.to_sym
     end
     self.freeze
   end
@@ -356,9 +356,9 @@ def question_and_answer
 
     # 無名関数
     # lambda
-    {Q: "[lambda [list 'x' 'y'] [+ x y]]", A: SAFE},
-    {Q: "[bind 'z' [lambda [list 'x' 'y'] [+ x y]]] [z 1 2]", A: 3},
-    {Q: "[bind 'x' [lambda [list] 10]] x", A: 10},
+    {Q: "[lambda ('x' 'y') [+ x y]]", A: SAFE},
+    {Q: "[bind 'z' [lambda ('x' 'y') [+ x y]]] [z 1 2]", A: 3},
+    {Q: "[bind 'x' [lambda () 10]] x", A: 10},
     # {Q: "[[lambda [list 'x' 'y'] [+ x y]] 1 2]", A: 3},
 
     # if

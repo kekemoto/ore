@@ -54,7 +54,7 @@ module BUILDIN
 
   CASE_FUNCTIONS = [
     # Number literal
-    [/\A[+|-]?[0-9]+.?[0-9]*\z/, ->(symbol, *args){symbol.to_f}],
+    [/\A[+|-]?[0-9]+.?[0-9]*\z/, ->(symbol, *args){symbol.to_s.to_f}],
 
     # String literal
     [/\A'.*'\z/, ->(symbol, *args){symbol[1...-1]}],
