@@ -139,9 +139,7 @@ class AST
   end
 
   def initialize tokens
-    enum = tokens.to_enum
-    loop do
-      token = enum.next
+    tokens.each do |token|
       if token.apply_start?
         new_syntax = BracketsSyntax.new enum.next, @current
         @current.add new_syntax if !@current.nil?
