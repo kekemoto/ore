@@ -122,6 +122,12 @@ class Token
     self.freeze
   end
 
+  def eval
+    # Syntaxのevalをここに持ってくる必要があるかも
+    # つうかリテラルを導入してしまった方がヨサゲ
+    SpaceManager.instance[@symbol]
+  end
+
   [ApplyStart, ApplyEnd, Fanction].each do |t|
     define_method "#{t.to_s.underscore}?", ->(){
       Kernel.eval "#{@type} == #{t}"
@@ -141,13 +147,13 @@ class AST
   def initialize tokens
     tokens.each do |token|
       if token.apply_start?
-        new_syntax = BracketsSyntax.new enum.next, @current
+        new_syntax = BracketsSyntax.new @current
         @current.add new_syntax if !@current.nil?
         @root ||= new_syntax
         @current = new_syntax
 
       elsif token.fanction?
-        @current.add BracketsSyntax.new token
+        @current.add token
 
       elsif token.apply_end?
         @current = @current.incomplete_syntax
@@ -166,7 +172,7 @@ class AST
     @root.inspect
   end
 
-  class SyntaxInterface
+  class SyntaxBase
     def eval
       raise 'Overwrite required'
     end
@@ -180,40 +186,51 @@ class AST
     end
   end
 
-  class BracketsSyntax < SyntaxInterface
-    attr_reader :operator, :edges, :incomplete_syntax
+  class BracketsSyntax < SyntaxBase
+    attr_reader :nodes, :incomplete_syntax
     def self.[] *input
       new *input
     end
 
-    def initialize token=nil, syntax=nil
-      @operator = token
-      @edges = []
+    def initialize syntax=nil
       @incomplete_syntax = syntax
+      @nodes = []
     end
 
-    def add function
-      @edges << function
+    def add symbol
+      @nodes << symbol
+    end
+
+    def operator
+      @nodes.first
+    end
+
+    def args
+      @nodes[1..-1] || []
     end
 
     def eval
-      BUILDIN::SYNTAX_EVALUTES[@operator.symbol].try(:call, *@edges) do
-        # If "try" is used, "@edges.map(&:eval)" will be evaluated first.
-        # So do not use "try"
-        if it = CaseFunction.instance[@operator.symbol]
-          it.call(@operator.symbol, *@edges.map(&:eval))
-        else
-          SpaceManager.instance[@operator.symbol][*@edges.map(&:eval)]
-        end
+      if it = BUILDIN::SYNTAX_EVALUTES[operator.symbol]
+        # syntax
+        it[*@nodes]
+      elsif it = CaseFunction.instance[operator.symbol.to_s]
+        # case function
+        it[operator.symbol, *@nodes.map(&:eval)]
+      elsif immediate?
+        # data
+        SpaceManager.instance[operator.symbol]
+      else
+        # apply
+        SpaceManager.instance[operator.symbol][*args.map(&:eval)]
       end
     end
 
     def immediate?
-      @edges.empty?
+      args.empty?
     end
 
     def to_code
-      immediate? ? "#{@operator.symbol}" : "[#{@operator.symbol} #{@edges.map(&:inspect).join(' ')}]"
+      @nodes.one? ? @nodes.first : "[#{@nodes.map(&:inspect).join(" ")}]"
     end
   end
 end
