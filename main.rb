@@ -66,6 +66,9 @@ class Scanner
     end.flatten
   end
 
+  # ３文字デリミタなどはStringと同じように予め分割しておくことにした
+  # ３文字デリミタで分割した後に２文字デリミタで分割して……
+
   def sift_delimiter text
     return text if /\A'.*'\z/ === text
     tokens = []
@@ -125,7 +128,11 @@ class Token
   def eval
     # Syntaxのevalをここに持ってくる必要があるかも
     # つうかリテラルを導入してしまった方がヨサゲ
-    SpaceManager.instance[@symbol]
+    if it = CaseFunction.instance[@symbol.to_s]
+      it[@symbol]
+    else
+      SpaceManager.instance[@symbol]
+    end
   end
 
   [ApplyStart, ApplyEnd, Fanction].each do |t|
@@ -230,7 +237,7 @@ class AST
     end
 
     def to_code
-      @nodes.one? ? @nodes.first : "[#{@nodes.map(&:inspect).join(" ")}]"
+      @nodes.one? ? @nodes.first.inspect : "[#{@nodes.map(&:inspect).join(" ")}]"
     end
   end
 end
